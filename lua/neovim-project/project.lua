@@ -279,6 +279,20 @@ M.create_commands = function()
       return { "default", "history", "alphabetical_name", "alphabetical_path" }
     end,
   })
+
+  -- Append a project to the appended projects file
+  vim.api.nvim_create_user_command("NeovimProjectAppend", function(args)
+    local dir = args.args
+    if vim.fn.isdirectory(dir) == 1 then
+      require("neovim-project.utils.path").add_appended_project(dir)
+      vim.notify("Appended project: " .. dir)
+    else
+      vim.notify("Not a valid directory: " .. dir, vim.log.levels.ERROR)
+    end
+  end, {
+    nargs = 1,
+    complete = "dir",
+  })
 end
 
 M.switch_project = function(dir)

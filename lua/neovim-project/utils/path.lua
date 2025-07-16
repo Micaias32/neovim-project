@@ -4,6 +4,7 @@ local M = {}
 M.datapath = vim.fn.stdpath("data") -- directory
 M.projectpath = M.datapath .. "/neovim-project" -- directory
 M.historyfile = M.projectpath .. "/history" -- file
+M.appended_projects_file = M.projectpath .. "/appended_projects" -- file for user-appended projects
 M.sessionspath = M.datapath .. "/neovim-sessions" --directory
 M.homedir = nil
 M.dir_pretty = nil -- directory of current project (respects user defined symlinks in config)
@@ -135,8 +136,57 @@ local function find_closest_parent(directories, subdirectory)
   return closest_parent
 end
 
+-- Read appended projects from file
+M.read_appended_projects = function()
+  local uv = vim.loop
+  local appended_projects = {}
+  local file = uv.fs_open(M.appended_projects_file, "r", 438)
+  if file ~= nil then
+    local stat = uv.fs_fstat(file)
+    if stat and stat.size > 0 then
+      local data = uv.fs_read(file, stat.size, 0)
+      if data then
+        for s in data:gmatch("[^\r\n]+") do
+          if vim.fn.isdirectory(s) == 1 then
+            local short = M.short_path(s)
+            if not vim.tbl_contains(appended_projects, short) then
+              table.insert(appended_projects, short)
+            end
+          end
+        end
+      end
+    end
+    uv.fs_close(file)
+  end
+  return appended_projects
+end
+
+-- Write appended projects to file
+M.write_appended_projects = function(projects)
+  local uv = vim.loop
+  local file = uv.fs_open(M.appended_projects_file, "w", 438)
+  if file ~= nil then
+    local out = ""
+    for _, v in ipairs(projects) do
+      out = out .. v .. "\n"
+    end
+    uv.fs_write(file, out, -1)
+    uv.fs_close(file)
+  end
+end
+
+-- Add a project to appended projects file
+M.add_appended_project = function(dir)
+  local projects = M.read_appended_projects()
+  local short = M.short_path(dir)
+  if not vim.tbl_contains(projects, short) then
+    table.insert(projects, short)
+    M.write_appended_projects(projects)
+  end
+end
+
 M.get_all_projects = function(patterns)
-  -- Get all existing projects from patterns
+  -- Get all existing projects from patterns and appended projects
   local projects = {}
   if patterns == nil then
     patterns = require("neovim-project.config").options.projects
@@ -152,6 +202,13 @@ M.get_all_projects = function(patterns)
       end
     end
   end
+  -- Add appended projects
+  local appended = M.read_appended_projects()
+  for _, path in ipairs(appended) do
+    if not vim.tbl_contains(projects, path) then
+      table.insert(projects, path)
+    end
+  end
   return projects
 end
 
@@ -159,6 +216,7 @@ function M.init()
   M.datapath = vim.fn.expand(require("neovim-project.config").options.datapath)
   M.projectpath = M.datapath .. "/neovim-project" -- directory
   M.historyfile = M.projectpath .. "/history" -- file
+  M.appended_projects_file = M.projectpath .. "/appended_projects" -- file for user-appended projects
   M.sessionspath = M.datapath .. "/neovim-sessions" --directory
   M.homedir = vim.fn.expand("~")
 end
